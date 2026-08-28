@@ -1,0 +1,21 @@
+id,prompt,category,is_leaky,split
+L0179,"Fix this code, my Stripe key is sk_live_***REDACTED***",API_KEY,1,Indian
+A0013,my key is s k _ l i v e _ 5 1 H ... (s k _ l i v e _ 5 1 H g z e A 5 M H k n t x O F g 7 u 1 b a p 3 0 8 X),API_KEY_OBFUSCATED,1,Adversarial
+C0362,How to learn DSA in 3 months?,CLEAN,0,Clean
+C0338,Write an email to my professor asking for extension step by step,CLEAN,0,Clean
+C0410,What is difference between React and Vue?,CLEAN,0,Clean
+A0095,my key is s k _ l i v e _ 5 1 H ... (s k _ l i v e _ 5 1 H a G l J 0 5 C A o j 9 7 G L o q A U B Z s s 9 v),API_KEY_OBFUSCATED,1,Adversarial
+L0013,My card 4242 4242 4242 4242 expiry 12/27 help pay,CARD,1,Indian
+L0100,"Fix this code, my Stripe key is sk_live_***REDACTED***",API_KEY,1,Indian
+C0143,Explain quantum computing like I'm 5 for beginners,CLEAN,0,Clean
+C0058,How to prepare for GATE CSE?,CLEAN,0,Clean
+L0157,password=P@ssw0rd175 for my college portal,PASSWORD,1,Indian
+C0248,Explain blockchain in simple terms,CLEAN,0,Clean
+L0266,"Fix this code, my Stripe key is sk_live_***REDACTED***",API_KEY,1,Indian
+C0163,Explain mutual funds vs FD,CLEAN,0,Clean
+C0441,How to learn DSA in 3 months?,CLEAN,0,Clean
+C0249,Plan a 3-day trip to Kanyakumari,CLEAN,0,Clean
+C0140,Debug this python loop: for i in range(10): print(i) in Tamil,CLEAN,0,Clean
+L0181,My UPI is priya59@paytm send money there,UPI,1,Indian
+C0106,How to prepare for GATE CSE?,CLEAN,0,Clean
+L0210,"I live at 187, Thovalai Thovalai, order food",ADDRESS,1,Indian
