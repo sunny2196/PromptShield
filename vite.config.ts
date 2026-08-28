@@ -6,6 +6,11 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        external: (id) => id === 'tesseract.js',
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

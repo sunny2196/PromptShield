@@ -48,6 +48,9 @@ const PATTERNS: Pattern[] = [
   { type:'PHONE', label:'Indian Mobile', severity:'MEDIUM', risk:'SIM swap & spam', reason:'Phone numbers are used for OTPs and identity verification. Sharing increases SIM-swap risk.', placeholder:'[REDACTED_PHONE]', regex:/\b(?:\+91[\s-]?)?[6-9]\d{9}\b/g, confidence:0.9, source:'regex'},
   { type:'INTERNAL', label:'Internal Link', severity:'MEDIUM', risk:'Corp data leakage', reason:'Internal Notion/Confluence/Jira links reveal org structure & may expose auth-gated docs to AI review queue.', placeholder:'[REDACTED_INT_LINK]', regex:/https?:\/\/(?:[a-z0-9-]+\.)*atlassian\.net\/wiki\/\S+|https?:\/\/.*\.notion\.site\/\S+|https?:\/\/.*\.slack\.com\/\S+/gi, confidence:0.85, source:'regex'},
   { type:'ADDRESS', label:'Home Address', severity:'MEDIUM', risk:'Physical privacy loss', reason:'Full addresses enable doxxing. AI should work with city/region only.', placeholder:'[REDACTED_ADDRESS]', regex:/\b\d{1,4}[\/,]?\s*[A-Za-z ]+(Street|St|Road|Rd|Nagar|Colony|Layout|Phase)\b/gi, confidence:0.7, source:'regex'},
+  { type:'FINANCIAL', label:'UPI ID', severity:'MEDIUM', risk:'Financial fraud via UPI', reason:'UPI IDs are directly linked to bank accounts. Sharing enables unauthorized collect requests.', placeholder:'[REDACTED_UPI]', regex:/\b[a-zA-Z0-9.\-_]{2,64}@(okicici|okaxis|okhdfcbank|oksbi|ybl|apl|paytm|upi)\b/gi, confidence:0.88, source:'regex'},
+  { type:'FINANCIAL', label:'Tamil Aadhaar Hint', severity:'HIGH', risk:'Govt ID in Tamil', reason:'Tamil phrase with Aadhaar indicates code-mixed PII. DPDP Act 2023 applies regardless of language.', placeholder:'[REDACTED_AADHAAR]', regex:/(Enoda|Aadhaar|aadhaar)[^\n]{0,24}\d{4}\s?\d{4}\s?\d{4}/gi, confidence:0.9, source:'regex'},
+  { type:'PAN', label:'Hinglish PAN', severity:'HIGH', risk:'PAN in Hinglish', reason:'Hinglish code-mix still exposes PAN. Qwen catches code-mixed without extra training.', placeholder:'[REDACTED_PAN]', regex:/(mera|my).*PAN[^A-Z]{0,12}[A-Z]{5}[0-9]{4}[A-Z]/gi, confidence:0.9, source:'regex'},
 ]
 
 const CONTEXTUAL_KEYWORDS: Array<{test: RegExp, make: (m: string, idx:number)=> Detection}> = [
@@ -57,6 +60,22 @@ const CONTEXTUAL_KEYWORDS: Array<{test: RegExp, make: (m: string, idx:number)=> 
   { test:/my (sugar|bp|thyroid|medical) (report|is|level).{0,40}/gi, make:(span,i)=>({ id:`ctx-med-${i}`, span, type:'MEDICAL', label:'Medical Info', severity:'MEDIUM', risk:'Health privacy', reason:'Health data is special-category personal data under DPDP/GDPR.', placeholder:'[REDACTED_MEDICAL]', start:-1,end:-1, confidence:0.75, source:'llm' as const})},
 ]
 
+export function shannonEntropy(s: string): number {
+  const freq: Record<string,number> = {}
+  for(const c of s) freq[c]=(freq[c]||0)+1
+  let e=0
+  for(const f of Object.values(freq)){
+    const p = f / s.length
+    e -= p * Math.log2(p)
+  }
+  return e
+}
+export function isHighEntropySecret(s: string): boolean {
+  if(s.length < 20) return false
+  if(!/^[A-Za-z0-9_\-+=/]+$/.test(s)) return false
+  const ent = shannonEntropy(s)
+  return ent > 4.5
+}
 export function scanLocal(text: string): Detection[] {
   const out: Detection[] = []
   let id=0
@@ -89,6 +108,23 @@ export function scanLocal(text: string): Detection[] {
       if(m[0].length===0) re.lastIndex++
     }
   })
+  // entropy detector for obfuscated keys: s k _ l i v e, base64, etc.
+  const tokens = text.split(/[\s\n,;|]+/)
+  for(const tok of tokens){
+    const cleaned = tok.replace(/[^A-Za-z0-9_\-+=/]/g,'')
+    if(cleaned.length >= 24 && isHighEntropySecret(cleaned)){
+      if(!out.some(d=> d.span===cleaned)){
+        const start = text.indexOf(tok)
+        out.push({ id:`ent-${cleaned.slice(0,6)}`, span: cleaned, type:'API_KEY', label:'High-entropy secret', severity:'HIGH', risk:'Obfuscated key', reason:`Shannon entropy ${shannonEntropy(cleaned).toFixed(2)} >4.5 indicates random secret (base64/obfuscated).`, placeholder:'[REDACTED_SECRET]', start: start>=0? start: -1, end: start>=0? start+cleaned.length : -1, confidence:0.82, source:'llm' })
+      }
+    }
+    // spaced obfuscation: s k _ l i v e
+    const deob = tok.replace(/\s+/g,'')
+    if(/s\s*k\s*_\s*l\s*i\s*v\s*e/i.test(tok) || /a\s*k\s*i\s*a/i.test(tok)){
+      const start = text.indexOf(tok)
+      out.push({ id:`obf-${start}`, span: tok, type:'API_KEY', label:'Obfuscated key', severity:'HIGH', risk:'Bypass attempt', reason:'Spaced/base64 obfuscation to evade filters.', placeholder:'[REDACTED_OBFUSCATED]', start, end: start+tok.length, confidence:0.78, source:'llm' })
+    }
+  }
   return out.sort((a,b)=> a.start-b.start)
 }
 

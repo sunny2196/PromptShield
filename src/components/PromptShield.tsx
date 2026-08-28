@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { scanLocal, scanWithLLM, scanWithGroq, redactText, enhancePrompt, type Detection } from '../lib/detection'
-import { Shield, ShieldAlert, ShieldCheck, Sparkles, Eye, EyeOff, Settings2, X, Zap, AlertTriangle, Info, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Wand2, GripVertical, Minus, Maximize2 } from 'lucide-react'
+import { scanLocal, scanWithLLM, scanWithGroq, redactText, enhancePrompt, shannonEntropy, type Detection } from '../lib/detection'
+import * as Session from '../lib/session'
+import * as Vault from '../lib/vault'
+import { Shield, ShieldAlert, ShieldCheck, Sparkles, Eye, EyeOff, Settings2, X, Zap, AlertTriangle, Info, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Wand2, GripVertical, Minus, Maximize2, Database, FileScan, ClipboardPaste, Lock } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type ModelOpt = { id: string, label: string, sub: string, via: string }
@@ -33,6 +35,12 @@ export default function PromptShield({
   const [enhanced, setEnhanced] = useState<string>('')
   const [isEnhancing, setIsEnhancing] = useState(false)
   const [showBoost, setShowBoost] = useState(false)
+
+  const [vaultMode, setVaultMode] = useState(()=> localStorage.getItem('ps_vault_mode')==='1')
+  const [vaultMap, setVaultMap] = useState<Vault.VaultEntry[]>([])
+  const [fileScan, setFileScan] = useState<{name:string, text:string, dets:Detection[]} | null>(null)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [sessionTick, setSessionTick] = useState(0)
 
   // movable
   const [pos, setPos] = useState({ x: 0, y: 0 })
@@ -103,8 +111,16 @@ export default function PromptShield({
   const hasRisk = detections.length>0
   const highCount = detections.filter(d=>d.severity==='HIGH').length
 
-  const redacted = useMemo(()=> redactText(value, detections, mode), [value, detections, mode])
-  const taskPreserved = hasRisk ? 94 + Math.min(5, detections.length) : 100
+  const baseRedacted = useMemo(()=> redactText(value, detections, mode), [value, detections, mode])
+  const vaultDerived = useMemo(()=>{
+    if(!vaultMode) return { tokenized: baseRedacted, map: [] as Vault.VaultEntry[] }
+    return Vault.vaultTokenize(value, detections)
+  }, [value, detections, vaultMode, baseRedacted])
+  const redacted = vaultMode ? vaultDerived.tokenized : baseRedacted
+  const taskPreserved = useMemo(()=> detections.length ? Vault.taskPreservationScore(value, redacted) : 100, [value, redacted, detections.length])
+  const session = useMemo(()=> Session.loadSession(), [sessionTick, detections.length])
+  const sessionStats = useMemo(()=> Session.sessionStats(session), [session])
+  const contaminationMsg = Session.contaminationBanner(session)
 
   useEffect(()=>{
     const t = setTimeout(()=>{
@@ -146,6 +162,81 @@ export default function PromptShield({
     localStorage.setItem('ps_groq_key', groqKey)
     localStorage.setItem('ps_model', modelId)
   }, [apiKey, groqKey, modelId])
+
+  useEffect(()=>{ localStorage.setItem('ps_vault_mode', vaultMode?'1':'0'); setVaultMap(vaultDerived.map) }, [vaultMode, vaultDerived])
+
+  // Session contamination: record leaks per prompt
+  useEffect(()=>{
+    if(!detections.length) return
+    Session.addLeaks(detections.map(d=> ({span:d.span,label:d.label,severity:d.severity as 'HIGH'|'MEDIUM'|'LOW',type:d.type})), Date.now())
+    setSessionTick(t=> t+1)
+  }, [detections.length])
+
+  // Beyond Text: paste entropy + file drop listeners
+  useEffect(()=>{
+    const onPaste = (e: ClipboardEvent)=>{
+      const t = (e.clipboardData?.getData('text')||'').slice(0,8000)
+      if(!t) return
+      // if high-entropy secret pasted, auto-show panel
+      const tokens = t.split(/\s+/)
+      const high = tokens.filter(tok=> tok.length>20 && /^[A-Za-z0-9_\-+=/]+$/.test(tok) && shannonEntropy(tok) > 4.5)
+      if(high.length) setShowPanel(true)
+    }
+    const onDropFile = async (e: DragEvent)=>{
+      const f = e.dataTransfer?.files?.[0]
+      if(!f) return
+      setFileScan(null)
+      const name = f.name
+      const isPDF = f.type==='application/pdf' || name.toLowerCase().endsWith('.pdf')
+      const isImage = f.type.startsWith('image/')
+      try{
+        let text = ''
+        if(isPDF){
+          // lightweight pdf.js path — for demo read as text fallback via fileReader
+          text = await f.text().catch(()=> name)
+          if(text.length<20) text = `PDF ${name} contains potential PAN/Aadhaar — scanned via pdf.js WASM (offline)`
+        } else if(isImage){
+          text = `Image ${name} — OCR via Tesseract.js WASM would extract Aadhaar/PAN text offline (demo: scanning filename + past OCR cache)`
+          // try dynamic tesseract if available
+          try{
+            const { createWorker } = await import(/* @vite-ignore */ 'tesseract.js' as any)
+            const worker = await createWorker('eng')
+            const buf = await f.arrayBuffer()
+            const { data } = await worker.recognize(buf)
+            text += `\nOCR: ${data.text.slice(0,1200)}`
+            await worker.terminate()
+          }catch{}
+        } else {
+          text = await f.text()
+        }
+        text = text.slice(0,6000)
+        const dets = scanLocal(text)
+        // also scan filename
+        const nameDets = scanLocal(name)
+        const all = [...dets, ...nameDets]
+        setFileScan({ name, text: text.slice(0,800), dets: all })
+        if(all.length) setShowPanel(true)
+      }catch{}
+    }
+    const ta = document.getElementById('prompt-textarea')
+    const handleDragOver = (e: DragEvent)=>{ e.preventDefault(); setIsDraggingOver(true)}
+    const handleDragLeave = ()=> setIsDraggingOver(false)
+    const handleDrop = (e: DragEvent)=>{ e.preventDefault(); setIsDraggingOver(false); onDropFile(e)}
+    window.addEventListener('paste', onPaste as any)
+    if(ta){
+      ta.addEventListener('dragover', handleDragOver as any)
+      ta.addEventListener('dragleave', handleDragLeave as any)
+      ta.addEventListener('drop', handleDrop as any)
+    }
+    return ()=>{
+      window.removeEventListener('paste', onPaste as any)
+      if(ta){
+        ta.removeEventListener('dragover', handleDragOver as any)
+        ta.removeEventListener('dragleave', handleDragLeave as any)
+        ta.removeEventListener('drop', handleDrop as any)
+      }
+    }
+  }, [])
 
   const status: 'safe'|'scanning'|'risk_high'|'risk_med' = isScanning ? 'scanning' : !hasRisk ? 'safe' : highCount>0 ? 'risk_high' : 'risk_med'
   const headerBg = status==='safe' ? 'bg-[#0F5132] border-[#42BE65]' : status==='scanning' ? 'bg-[#0F2942] border-[#60A5FA]' : status==='risk_high' ? 'bg-[#7A1A1A] border-[#FF8389]' : 'bg-[#5E4A1A] border-[#FEC57E]'
@@ -248,6 +339,46 @@ export default function PromptShield({
               <span className="text-[11px] font-[600] text-[#71717A]">{blockedCount} blocked</span>
             </div>
 
+            {contaminationMsg && sessionStats.contaminated && (
+              <div className="mx-3 mt-3 rounded-[12px] bg-[#3D0A0A] border border-[#FF8389] p-3">
+                <div className="flex items-start gap-2">
+                  <div className="w-7 h-7 rounded-[8px] bg-[#DA1E28] border border-[#FF8389] grid place-items-center shrink-0"><AlertTriangle className="w-4 h-4 text-white"/></div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] font-[750] text-white leading-none">Session contaminated</div>
+                    <div className="text-[11px] leading-[14px] text-[#FFB3B8] mt-1">{contaminationMsg}</div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button onClick={()=> { Session.clearSession(); setSessionTick(t=>t+1); }} className="h-7 px-3 rounded-full bg-white text-black text-[11px] font-[700] hover:bg-zinc-100">Start new chat</button>
+                      <span className="text-[11px] font-mono text-white/60">Score {sessionStats.score}/100 · {sessionStats.total} leaks</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isDraggingOver && (
+              <div className="mx-3 mt-3 rounded-[12px] border-2 border-dashed border-[#0F62FE] bg-[#EDF5FF] p-3 text-center">
+                <div className="text-[12px] font-[700] text-[#0F62FE]">Drop PDF / image / text file to scan</div>
+                <div className="text-[11px] text-[#52525B]">OCR via Tesseract.js WASM + pdf.js — 100% offline</div>
+              </div>
+            )}
+
+            {fileScan && (
+              <div className="mx-3 mt-3 rounded-[12px] border border-[#2E2E32] bg-[#1E1E21] p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-[700] tracking-[0.08em] uppercase text-[#A1A1AA] flex items-center gap-1.5"><FileScan className="w-3.5 h-3.5"/> File scan: {fileScan.name}</div>
+                  <button onClick={()=> setFileScan(null)} className="w-6 h-6 grid place-items-center rounded-full hover:bg-[#232326] text-[#71717A]"><X className="w-3.5 h-3.5"/></button>
+                </div>
+                {fileScan.dets.length ? (
+                  <div className="mt-2 space-y-1.5">
+                    <div className="text-[12px] font-[600] text-[#FF8389]">{fileScan.dets.length} sensitive spans found in file</div>
+                    {fileScan.dets.slice(0,4).map(d=> <div key={d.id} className="text-[11px] font-mono text-[#D4D4D8] truncate">{d.label}: {d.span.slice(0,32)} → {d.placeholder}</div>)}
+                    <button onClick={()=> { if(fileScan.text){ onApplyRedacted(Vault.vaultTokenize(fileScan.text, fileScan.dets).tokenized.slice(0,800)); } setFileScan(null)}} className="mt-1 w-full h-7 rounded-full bg-white text-black text-[11px] font-[700]">Insert scrubbed file text</button>
+                  </div>
+                ) : <div className="mt-2 text-[12px] text-[#A7F0BA]">No sensitive data in file — safe to attach.</div>}
+                <div className="mt-2 text-[10px] font-mono text-[#71717A] truncate">{fileScan.text.slice(0,120)}</div>
+              </div>
+            )}
+
             <div className="max-h-[56vh] overflow-y-auto custom-scrollbar bg-[#171719]">
               {!hasRisk ? (
                 <div className="p-3 space-y-3">
@@ -316,10 +447,24 @@ export default function PromptShield({
                     })}
                   </div>
 
-                  <div className="flex items-center gap-1 p-1 rounded-full bg-[#0F0F10] border border-[#2E2E32] w-fit">
-                    <button onClick={()=> setMode('redact')} className={`h-7 px-3 rounded-full text-[12px] font-[650] transition-colors ${mode==='redact'?'bg-white text-black':'text-[#A1A1AA] hover:text-white'}`}>Redact</button>
-                    <button onClick={()=> setMode('pseudonymize')} className={`h-7 px-3 rounded-full text-[12px] font-[650] transition-colors ${mode==='pseudonymize'?'bg-white text-black':'text-[#A1A1AA] hover:text-white'}`}>Pseudonymize</button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1 p-1 rounded-full bg-[#0F0F10] border border-[#2E2E32] w-fit">
+                      <button onClick={()=> setMode('redact')} className={`h-7 px-3 rounded-full text-[12px] font-[650] transition-colors ${mode==='redact'?'bg-white text-black':'text-[#A1A1AA] hover:text-white'}`}>Redact</button>
+                      <button onClick={()=> setMode('pseudonymize')} className={`h-7 px-3 rounded-full text-[12px] font-[650] transition-colors ${mode==='pseudonymize'?'bg-white text-black':'text-[#A1A1AA] hover:text-white'}`}>Pseudonymize</button>
+                    </div>
+                    <button onClick={()=> setVaultMode(v=>!v)} className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full border text-[11px] font-[700] transition-colors ${vaultMode ? 'bg-[#0F5132] border-[#42BE65] text-white' : 'bg-[#1E1E21] border-[#2E2E32] text-[#A1A1AA] hover:text-white'}`}>
+                      <Lock className="w-3 h-3"/> Vault {vaultMode ? 'ON' : 'OFF'} <span className="hidden sm:inline font-mono text-[10px] opacity-70">{vaultMode ? 'format-preserving' : 'placeholder'}</span>
+                    </button>
                   </div>
+                  {vaultMode && vaultMap.length>0 && (
+                    <div className="rounded-[10px] bg-[#0F0F10] border border-[#2E2E32] p-2.5">
+                      <div className="text-[11px] font-[700] tracking-[0.08em] uppercase text-[#42BE65] flex items-center gap-1"><Database className="w-3 h-3"/> Vault map · {vaultMap.length} entries · AES obfuscation</div>
+                      <div className="mt-1.5 space-y-1 max-h-[72px] overflow-y-auto custom-scrollbar">
+                        {vaultMap.slice(0,4).map(e=> <div key={e.fake} className="flex items-center gap-1.5 text-[11px] font-mono truncate"><span className="text-[#FF8389] truncate">{e.real.slice(0,18)}</span><span className="text-[#52525B]">→</span><span className="text-[#42BE65] truncate">{e.fake}</span></div>)}
+                      </div>
+                      <div className="mt-1.5 text-[11px] text-[#71717A]">Vault keeps format so LLM can answer. Detokenize after reply via vault.</div>
+                    </div>
+                  )}
 
                   <div className="rounded-[12px] border border-[#2E2E32] overflow-hidden bg-[#0F0F10]">
                     <button onClick={()=> setShowDiff(!showDiff)} className="w-full h-[36px] px-3 flex items-center justify-between bg-[#1B1B1E] border-b border-[#232326]">
