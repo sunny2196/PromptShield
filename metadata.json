@@ -1,0 +1,6 @@
+{
+  "name": "Claude AI Dark Interface",
+  "description": "Pixel-perfect clone of the Claude AI dark mode web UI with sidebar navigation, pinned chats, and central prompt console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
