@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "PromptShield — Prompt Data-Leak Guard",
+  "version": "2.0.0",
+  "description": "T5.1 — Blocks Aadhaar/PAN/API keys before they reach ChatGPT/Claude/Gemini. Session contamination + Vault + file scan. Better than Nightfall.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://www.claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://perplexity.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://copilot.microsoft.com/*",
+    "https://api.groq.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "action": {
+    "default_title": "PromptShield — Settings",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "public/icons/shield-16.png",
+      "48": "public/icons/shield-48.png",
+      "128": "public/icons/shield-128.png"
+    }
+  },
+  "icons": {
+    "16": "public/icons/shield-16.png",
+    "48": "public/icons/shield-48.png",
+    "128": "public/icons/shield-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://www.claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://perplexity.ai/*",
+        "https://www.perplexity.ai/*",
+        "https://copilot.microsoft.com/*"
+      ],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/*", "public/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

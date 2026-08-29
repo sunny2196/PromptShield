@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptShield Settings</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{width:380px;font-family:Inter,system-ui,sans-serif;background:#121214;color:#FAFAFA}
+    .wrap{padding:14px}
+    h1{font-size:15px;font-weight:750;display:flex;align-items:center;gap:8px}
+    .badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:#fff;color:#000}
+    .card{background:#1E1E21;border:1px solid #2E2E32;border-radius:12px;padding:12px;margin-top:10px}
+    .label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A1A1AA}
+    select,input{width:100%;margin-top:6px;height:36px;padding:0 10px;border-radius:10px;background:#0F0F10;border:1px solid #2E2E32;color:#fff;font-size:12px}
+    input::placeholder{color:#52525B}
+    .row{display:flex;gap:8px;margin-top:8px}
+    .btn{flex:1;height:36px;border-radius:10px;border:1px solid #2E2E32;background:#232326;color:#fff;font-size:12px;font-weight:650;cursor:pointer}
+    .btn.primary{background:#fff;color:#000;border-color:#fff}
+    .hint{font-size:11px;color:#71717A;margin-top:8px;line-height:14px}
+    .pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:999px;background:#0E1A14;border:1px solid #1F3A2B;color:#6FDC8C;font-size:11px;font-weight:600}
+    .dot{width:7px;height:7px;border-radius:999px;background:#42BE65;animation:pulse 1.5s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1><span style="width:28px;height:28px;display:grid;place-items:center;background:#0F5132;border:1px solid #42BE65;border-radius:9px;font-size:14px">🛡️</span> PromptShield <span class="badge">T5.1 v2</span> <span class="pill" style="margin-left:auto"><span class="dot"></span> Local-first</span></h1>
+    <div class="hint">Same engine as Claude simulation — now runs on real ChatGPT/Claude/Gemini/Perplexity.</div>
+
+    <div class="card">
+      <div class="label">Active model</div>
+      <select id="model">
+        <option value="qwen3b">Qwen 2.5 3B — via Groq (Recommended)</option>
+        <option value="llama3b">Llama 3.2 3B — via Groq</option>
+        <option value="gemini-flash">Gemini 2.0 Flash — via Google</option>
+      </select>
+      <div class="hint">Groq = sub-500ms contextual scan. Gemini = fallback + PromptCowboy boost.</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Groq API key — Llama/Qwen 3B</div>
+      <input id="groq" placeholder="gsk_..." />
+      <div class="label" style="margin-top:10px">Gemini API key — fallback & boost</div>
+      <input id="gemini" placeholder="AIza..." />
+      <div class="row">
+        <a href="https://console.groq.com/keys" target="_blank" class="btn" style="text-align:center;line-height:36px;text-decoration:none">Get Groq</a>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn" style="text-align:center;line-height:36px;text-decoration:none">Get Gemini</a>
+      </div>
+      <div class="hint">Stored in <b style="color:#A1A1AA">chrome.storage.local</b> only. Never sent to us. Pre-filled if you set in Claude simulation.</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Vault mode</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <input type="checkbox" id="vault" style="width:16px;height:16px">
+        <label for="vault" style="font-size:12px;font-weight:600">Format-preserving tokenization</label>
+      </div>
+      <div class="hint">arjun@gmail.com → user_4f9k@example.com (same format). Keeps LLM useful.</div>
+    </div>
+
+    <div class="row">
+      <button id="save" class="btn primary">Save</button>
+      <button id="clear" class="btn">Clear session</button>
+    </div>
+    <div id="status" class="hint" style="text-align:center;margin-top:6px"></div>
+    <div class="hint" style="text-align:center;margin-top:10px">Load on <b style="color:#D4D4D8">claude.ai / chat.openai.com / gemini.google.com / perplexity.ai</b> — shield appears beside the prompt box. Drag header to move.</div>
+  </div>
+  <script src="src/popup.js"></script>
+</body>
+</html>

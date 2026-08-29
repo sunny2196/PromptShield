@@ -1,0 +1,6 @@
+/* PromptShield — Shadow DOM styles, isolated from host */
+:host { all: initial; }
+.ps-root { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+.ps-root * { box-sizing: border-box; font-family: inherit; }
+.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #2E2E32; border-radius: 4px; }
