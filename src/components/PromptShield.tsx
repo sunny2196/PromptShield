@@ -24,7 +24,7 @@ export default function PromptShield({
   const [localDetections, setLocalDetections] = useState<Detection[]>([])
   const [llmDetections, setLlmDetections] = useState<Detection[]>([])
   const [showPanel, setShowPanel] = useState(true)
-  const [minimized, setMinimized] = useState(false)
+  const [minimized, setMinimized] = useState(true)
   const [mode, setMode] = useState<'redact'|'pseudonymize'>('redact')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -172,6 +172,20 @@ export default function PromptShield({
     setSessionTick(t=> t+1)
   }, [detections.length])
 
+  // Highlight prompt box with red when risk (minimal, just red border)
+  useEffect(()=>{
+    const ta = document.getElementById('prompt-textarea') as HTMLElement | null
+    const cont = document.getElementById('prompt-input-container') as HTMLElement | null
+    if(!ta && !cont) return
+    if(hasRisk){
+      if(ta){ ta.style.outline='2px solid #FF8389'; (ta.style as any).outlineOffset='2px'; ta.style.boxShadow='0 0 0 4px rgba(255,131,137,.15)'; }
+      if(cont){ cont.style.borderColor='#FF8389'; cont.style.boxShadow='0 0 0 4px rgba(255,131,137,.12)'; }
+    } else {
+      if(ta){ ta.style.outline=''; ta.style.boxShadow=''; }
+      if(cont){ cont.style.borderColor=''; cont.style.boxShadow=''; }
+    }
+  }, [hasRisk])
+
   // Beyond Text: paste entropy + file drop listeners
   useEffect(()=>{
     const onPaste = (e: ClipboardEvent)=>{
@@ -196,16 +210,8 @@ export default function PromptShield({
           text = await f.text().catch(()=> name)
           if(text.length<20) text = `PDF ${name} contains potential PAN/Aadhaar — scanned via pdf.js WASM (offline)`
         } else if(isImage){
-          text = `Image ${name} — OCR via Tesseract.js WASM would extract Aadhaar/PAN text offline (demo: scanning filename + past OCR cache)`
-          // try dynamic tesseract if available
-          try{
-            const { createWorker } = await import(/* @vite-ignore */ 'tesseract.js' as any)
-            const worker = await createWorker('eng')
-            const buf = await f.arrayBuffer()
-            const { data } = await worker.recognize(buf)
-            text += `\nOCR: ${data.text.slice(0,1200)}`
-            await worker.terminate()
-          }catch{}
+          text = `Image ${name} — OCR via Tesseract.js WASM would extract Aadhaar/PAN text offline (demo: scanning filename + text fallback)`
+          // In production: const { createWorker } = await import('tesseract.js'); // WASM offline OCR
         } else {
           text = await f.text()
         }

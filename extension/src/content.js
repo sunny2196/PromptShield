@@ -178,6 +178,7 @@
   let pos={x: window.innerWidth-414, y:96};
   if(window.innerWidth<1280){ pos={x: Math.max(12,(window.innerWidth-390)/2), y: window.innerHeight-520 }; }
   let dragging=false, dragStart=null;
+  let minimized=true; // default minimized — just red/green
   let currentText='', detections=[], isScanning=false, vaultMode=false, sessionTick=0;
   let groqKey='', gemKey='', modelHint='qwen3b';
 
@@ -198,6 +199,19 @@
     const redacted = vaultMode ? (await vaultTokenize(currentText,detections)).tokenized : redactText(currentText,detections);
     const sess=await sessionLoad(); const score=sessionScore(sess); const contam=score>15 ? `This chat already contains ${sess.leaks.length} leak${sess.leaks.length>1?'s':''} from ${Math.max(1,Math.round((Date.now()-sess.leaks[0].timestamp)/60000))} min ago. This session is tainted — start NEW CHAT. Score ${score}/100` : null;
 
+    // highlight prompt box with red when risk
+    const taHl = findPromptBox();
+    if(taHl){
+      if(hasRisk){
+        taHl.style.outline='2px solid #FF8389';
+        taHl.style.outlineOffset='2px';
+        taHl.style.borderRadius='12px';
+        taHl.style.boxShadow='0 0 0 4px rgba(255,131,137,.15)';
+      } else {
+        taHl.style.outline=''; taHl.style.boxShadow='';
+      }
+    }
+
     card.innerHTML=`
       <div class="ps-header" style="background:${headerBg}" id="ps-drag">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -209,12 +223,13 @@
           </div>
         </div>
         <div style="display:flex;gap:4px">
-          <button id="ps-min" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">−</button>
+          <button id="ps-min" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">${minimized?'▢':'−'}</button>
           <button id="ps-set" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">⚙</button>
           <button id="ps-hide" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">×</button>
         </div>
       </div>
-      <div class="ps-rail"><span style="display:flex;align-items:center;gap:6px">⚡ ${isScanning?'Analyzing':hasRisk?`Found ${detections.length}`:'No sensitive data'} ${isScanning?'<span style="width:12px;height:12px;border:2px solid #3A3A42;border-top-color:#0F62FE;border-radius:999px;display:inline-block;animation:spin .8s linear infinite"></span>':''}</span><span style="color:#71717A">${sess.leaks.length} leaks • score ${score}</span></div>
+      <div id="ps-collapsible" style="display:${minimized?'none':'block'}">
+      <div class="ps-rail"><span style="display:flex;align-items:center;gap:6px">⚡ ${isScanning?'Analyzing':hasRisk?`Found ${detections.length}`:'Safe'}</span><span style="color:${hasRisk?'#FF8389':'#42BE65'};font-weight:700">${hasRisk?'● Needs fix':'● Clean'}</span></div>
       ${contam?`<div class="ps-contam"><div style="font-size:12px;font-weight:750;color:#fff">Session contaminated</div><div style="font-size:11px;color:#FFB3B8;margin-top:4px">${contam}</div><button id="ps-newchat" style="margin-top:8px;height:28px;padding:0 12px;border-radius:999px;background:#fff;color:#000;font-size:11px;font-weight:700;border:none">Start new chat</button></div>`:''}
       <div class="ps-body">
         ${!hasRisk?`
@@ -283,6 +298,7 @@
         <button id="ps-copy" class="ps-btn" style="flex:1">Copy safe</button>
         <button id="ps-detok" class="ps-btn" style="flex:1;display:${vaultMode?'inline-flex':'none'};align-items:center;justify-content:center;gap:4px">Detokenize</button>
       </div>
+      </div>
     `;
 
     // drag
@@ -297,9 +313,7 @@
       hdr.onpointerup=e=>{ dragging=false; try{hdr.releasePointerCapture(e.pointerId)}catch{} };
     }
     card.querySelector('#ps-hide')?.addEventListener('click',()=>{ card.style.display='none'; showFloating(); });
-    card.querySelector('#ps-min')?.addEventListener('click',()=>{
-      const b=card.querySelector('.ps-body'); if(b) b.style.display=b.style.display==='none'?'block':'none';
-    });
+    card.querySelector('#ps-min')?.addEventListener('click',()=>{ minimized=!minimized; render(); });
     card.querySelector('#ps-set')?.addEventListener('click',()=> chrome.runtime.openOptionsPage ? chrome.runtime.openOptionsPage() : window.open(chrome.runtime.getURL('popup.html')) );
     card.querySelector('#ps-vault')?.addEventListener('click',async()=>{ await setStore({ps_vault_mode: vaultMode?'0':'1'}); render(); });
     card.querySelector('#ps-apply')?.addEventListener('click',()=>{ const ta=findPromptBox(); if(ta) setPromptBox(ta, redacted); });
