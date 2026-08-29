@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PromptShield — Prompt Data-Leak Guard",
+  "name": "Ultron — Privacy Guard for AI",
   "version": "2.0.0",
-  "description": "T5.1 — Blocks Aadhaar/PAN/API keys before they reach ChatGPT/Claude/Gemini. Session contamination + Vault + file scan. Better than Nightfall.",
+  "description": "Ultron — Blocks sensitive data before it reaches ChatGPT/Claude/Gemini. One-click vault + make prompt perfect.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chat.openai.com/*",
@@ -17,7 +17,7 @@
     "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
-    "default_title": "PromptShield — Settings",
+    "default_title": "Ultron — Settings",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "public/icons/shield-16.png",

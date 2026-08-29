@@ -143,6 +143,7 @@
   };
 
   // ---------- UI injection ----------
+// ---------- UI injection — Ultron minimal ----------
   const createHost = () => {
     if(document.getElementById('ps-host')) return document.getElementById('ps-host');
     const host=document.createElement('div'); host.id='ps-host';
@@ -151,35 +152,21 @@
     const shadow=host.attachShadow({mode:'open'});
     const style=document.createElement('style');
     style.textContent=`
-      .ps-card{position:fixed;right:24px;top:96px;width:390px;max-width:calc(100vw - 16px);background:#171719;border:1px solid #2E2E32;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.6);font-family:Inter,system-ui,sans-serif;pointer-events:auto;overflow:hidden}
-      .ps-header{height:52px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #232326;cursor:grab}
+      .ps-card{position:fixed;right:24px;top:96px;width:360px;max-width:calc(100vw - 16px);background:#0A0A0B;border:1px solid #232326;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.6);font-family:Inter,system-ui,sans-serif;pointer-events:auto;overflow:hidden}
+      .ps-header{height:48px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #232326;cursor:grab}
       .ps-header:active{cursor:grabbing}
-      .ps-title{font-size:13px;font-weight:750;color:#fff;display:flex;align-items:center;gap:6px}
-      .ps-badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:#fff;color:#000}
-      .ps-dot{width:6px;height:6px;border-radius:999px}
-      .ps-rail{padding:10px 12px;background:#1E1E21;border-bottom:1px solid #232326;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:#D4D4D8}
-      .ps-body{max-height:56vh;overflow:auto}
-      .ps-body::-webkit-scrollbar{width:5px}
-      .ps-body::-webkit-scrollbar-thumb{background:#2E2E32;border-radius:4px}
-      .ps-item{margin:8px 12px;background:#1E1E21;border:1px solid #2E2E32;border-radius:12px;overflow:hidden}
-      .ps-btn{height:38px;border-radius:10px;border:1px solid #2E2E32;background:#232326;color:#fff;font-size:13px;font-weight:650;cursor:pointer}
-      .ps-btn.primary{background:#fff;color:#000;border-color:#fff}
-      .ps-pill{height:26px;padding:0 10px;border-radius:999px;border:1px solid #2E2E32;background:#1E1E21;color:#D4D4D8;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
-      .ps-contam{margin:12px;background:#3D0A0A;border:1px solid #FF8389;border-radius:12px;padding:12px}
-      .ps-vault{margin:12px;background:#0F0F10;border:1px solid #2E2E32;border-radius:12px;padding:10px}
-      .ps-drop{margin:12px;border:2px dashed #0F62FE;background:#EDF5FF;border-radius:12px;padding:12px;text-align:center}
       button{cursor:pointer}
     `;
     shadow.appendChild(style);
     return shadow;
   };
 
-  let shadow, card, bodyEl, railEl, headerEl;
+  let shadow, card;
   let pos={x: window.innerWidth-414, y:96};
-  if(window.innerWidth<1280){ pos={x: Math.max(12,(window.innerWidth-390)/2), y: window.innerHeight-520 }; }
+  if(window.innerWidth<1280){ pos={x: Math.max(12,(window.innerWidth-360)/2), y: window.innerHeight-520 }; }
   let dragging=false, dragStart=null;
-  let minimized=true; // default minimized — just red/green
-  let currentText='', detections=[], isScanning=false, vaultMode=false, sessionTick=0;
+  let minimized=true;
+  let currentText='', detections=[], isScanning=false, vaultMode=false;
   let groqKey='', gemKey='', modelHint='qwen3b';
 
   const render = async ()=>{
@@ -194,131 +181,61 @@
     const hasRisk=detections.length>0;
     const high=detections.filter(d=>d.severity==='HIGH').length;
     const status=isScanning?'scanning':!hasRisk?'safe':high?'risk_high':'risk_med';
-    const headerBg=status==='safe'?'#0F5132':status==='scanning'?'#0F2942':status==='risk_high'?'#7A1A1A':'#5E4A1A';
-    const statusText=isScanning?'Scanning':!hasRisk?'Safe to send':`${detections.length} risks${high?` · ${high} High`:''}`;
+    const headerBg=status==='safe'?'#0A0A0B':status==='scanning'?'#0A1628':status==='risk_high'?'#1A0A0A':'#1A140A';
+    const statusText=isScanning?'Scanning':!hasRisk?'Safe':`${detections.length} sensitive`;
     const redacted = vaultMode ? (await vaultTokenize(currentText,detections)).tokenized : redactText(currentText,detections);
-    const sess=await sessionLoad(); const score=sessionScore(sess); const contam=score>15 ? `This chat already contains ${sess.leaks.length} leak${sess.leaks.length>1?'s':''} from ${Math.max(1,Math.round((Date.now()-sess.leaks[0].timestamp)/60000))} min ago. This session is tainted — start NEW CHAT. Score ${score}/100` : null;
+    const sess=await sessionLoad(); const score=sessionScore(sess); const contam=score>15;
 
-    // highlight prompt box with red when risk
-    const taHl = findPromptBox();
-    if(taHl){
-      if(hasRisk){
-        taHl.style.outline='2px solid #FF8389';
-        taHl.style.outlineOffset='2px';
-        taHl.style.borderRadius='12px';
-        taHl.style.boxShadow='0 0 0 4px rgba(255,131,137,.15)';
-      } else {
-        taHl.style.outline=''; taHl.style.boxShadow='';
-      }
+    // highlight prompt box
+    const ta=findPromptBox();
+    if(ta){
+      if(hasRisk){ ta.style.outline='2px solid #FF4D4F'; ta.style.outlineOffset='2px'; ta.style.boxShadow='0 0 0 4px rgba(255,77,79,.12)'; }
+      else { ta.style.outline=''; ta.style.boxShadow=''; }
     }
 
     card.innerHTML=`
-      <div class="ps-header" style="background:${headerBg}" id="ps-drag">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0">
-          <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.15)">⋮⋮</span>
-          <div style="width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">🛡️</div>
-          <div style="min-width:0">
-            <div class="ps-title">PromptShield <span class="ps-badge">EXT</span></div>
-            <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,.8);display:flex;align-items:center;gap:4px"><span class="ps-dot" style="background:${hasRisk?'#fff':'#A7F0BA'}"></span>${statusText}</div>
+      <div class="ps-header" style="background:${headerBg};border-bottom:1px solid #232326" id="ps-drag">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:28px;height:28px;border-radius:10px;background:#fff;color:#000;display:grid;place-items:center;font-weight:800">U</div>
+          <div>
+            <div style="font-size:13px;font-weight:800;color:#fff;letter-spacing:-.02em">Ultron</div>
+            <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,.6);display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:999px;background:${hasRisk?'#FF4D4F':'#00C950'}"></span>${statusText}</div>
           </div>
         </div>
-        <div style="display:flex;gap:4px">
-          <button id="ps-min" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">${minimized?'▢':'−'}</button>
-          <button id="ps-set" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">⚙</button>
-          <button id="ps-hide" style="width:28px;height:28px;border-radius:999px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.15);color:#fff">×</button>
+        <div style="display:flex;gap:6px">
+          <button id="ps-min" style="width:28px;height:28px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:#fff">${minimized?'▢':'−'}</button>
+          <button id="ps-set" style="width:28px;height:28px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:#fff">⚙</button>
+          <button id="ps-hide" style="width:28px;height:28px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:#fff">×</button>
         </div>
       </div>
       <div id="ps-collapsible" style="display:${minimized?'none':'block'}">
-      <div class="ps-rail"><span style="display:flex;align-items:center;gap:6px">⚡ ${isScanning?'Analyzing':hasRisk?`Found ${detections.length}`:'Safe'}</span><span style="color:${hasRisk?'#FF8389':'#42BE65'};font-weight:700">${hasRisk?'● Needs fix':'● Clean'}</span></div>
-      ${contam?`<div class="ps-contam"><div style="font-size:12px;font-weight:750;color:#fff">Session contaminated</div><div style="font-size:11px;color:#FFB3B8;margin-top:4px">${contam}</div><button id="ps-newchat" style="margin-top:8px;height:28px;padding:0 12px;border-radius:999px;background:#fff;color:#000;font-size:11px;font-weight:700;border:none">Start new chat</button></div>`:''}
-      <div class="ps-body">
-        ${!hasRisk?`
-          <div style="padding:12px">
-            <div style="background:#0E1A14;border:1px solid #1F3A2B;border-radius:12px;padding:12px;display:flex;gap:10px">
-              <div style="width:32px;height:32px;border-radius:10px;background:#0F5132;display:grid;place-items:center;flex-shrink:0">✓</div>
-              <div><div style="font-size:13px;font-weight:650;color:#A7F0BA">Safe to send</div><div style="font-size:12px;color:#6FDC8C;margin-top:4px">No sensitive data. Paste an API key, Aadhaar or email to see red.</div></div>
+        ${contam?`<div style="margin:12px;background:#1A0A0A;border:1px solid #FF4D4F;border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:600;color:#fff">Session tainted</span><button id="ps-newchat" style="height:28px;padding:0 12px;border-radius:999px;background:#fff;color:#000;font-size:11px;font-weight:700;border:none">New chat</button></div>`:''}
+        <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+          ${!hasRisk?`
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#0F1A0F;border:1px solid #1A3A1A;border-radius:12px">
+              <span style="width:8px;height:8px;border-radius:999px;background:#00C950"></span>
+              <span style="font-size:13px;font-weight:600;color:#fff">Safe to send</span>
             </div>
-            <div style="margin-top:12px;background:#0F0F10;border:1px solid #2E2E32;border-radius:12px;overflow:hidden">
-              <div style="padding:10px 12px;background:linear-gradient(90deg,#1A1A2E,#1E1E21);border-bottom:1px solid #232326;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A1A1AA">Turn lazy prompts into great ones</div>
-              <div style="padding:12px"><div style="font-size:12px;color:#A1A1AA">One tap adds role, goal, constraints and format — placeholders stay safe.</div><button id="ps-boost" style="margin-top:10px;width:100%;height:36px;border-radius:10px;background:linear-gradient(90deg,#7C3AED,#0F62FE);color:#fff;font-size:13px;font-weight:700;border:none">Turn into great prompt</button></div>
-            </div>
-            <div style="margin-top:12px;border:2px dashed #2E2E32;border-radius:12px;padding:12px;text-align:center;background:#1E1E21">
-              <div style="font-size:12px;font-weight:650;color:#D4D4D8">Drop PDF / image here to scan</div><div style="font-size:11px;color:#71717A">OCR via Tesseract.js + pdf.js — 100% offline</div>
-            </div>
-          </div>
-        `:`
-          <div style="padding:12px">
-            ${detections.map(d=>`
-              <div class="ps-item">
-                <div style="padding:10px 12px;display:flex;justify-content:space-between;gap:8px">
-                  <div style="flex:1;min-width:0">
-                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                      <span style="padding:2px 8px;border-radius:999px;font-size:11px;font-weight:750;border:1px solid ${d.severity==='HIGH'?'#FF8389':'#FFB14E'};background:${d.severity==='HIGH'?'#DA1E28':'#FEC57E'};color:${d.severity==='HIGH'?'#fff':'#000'}">${d.severity}</span>
-                      <span style="font-size:13px;font-weight:650;color:#fff">${d.label}</span>
-                      <span style="font-size:10px;font-family:monospace;padding:2px 6px;border-radius:6px;background:#1E1E21;border:1px solid #2E2E32;color:#A1A1AA">${d.source==='llm'?'AI':d.source}</span>
-                    </div>
-                    <div style="margin-top:6px;display:inline-flex;gap:6px;align-items:center;padding:4px 8px;background:#0F0F10;border:1px solid #2E2E32;border-radius:8px;max-width:100%">
-                      <span style="font-size:12px;font-family:monospace;color:#FF8389;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${d.span}</span>
-                      <span style="color:#52525B">→</span>
-                      <span style="font-size:11px;font-family:monospace;color:#42BE65">${d.placeholder}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            `).join('')}
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-              <span class="ps-pill">Vault <b style="color:${vaultMode?'#42BE65':'#71717A'}">${vaultMode?'ON':'OFF'}</b></span>
-              <button id="ps-vault" class="ps-pill" style="cursor:pointer">Toggle Vault</button>
-              <span style="font-size:11px;color:#71717A">Score ${Math.round((()=>{
-                const a=new Set(currentText.toLowerCase().split(/\W+/).filter(Boolean));
-                const b=new Set(redacted.toLowerCase().split(/\W+/).filter(Boolean));
-                let inter=0; for(const t of a) if(b.has(t)) inter++; const union=new Set([...a,...b]).size;
-                return (union?inter/union:0)*100;
-              })())}% preserved</span>
-            </div>
-            <div style="margin-top:12px;background:#0F0F10;border:1px solid #2E2E32;border-radius:12px;overflow:hidden">
-              <div style="padding:10px 12px;background:#1B1B1E;border-bottom:1px solid #232326;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A1A1AA">Before → After</div>
-              <div style="padding:12px">
-                <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#71717A">Original</div>
-                <div style="margin-top:4px;background:#1E1E21;border:1px solid #2E2E32;border-radius:10px;padding:10px;font-size:12px;font-family:monospace;color:#FF8389;white-space:pre-wrap;word-break:break-word">${currentText.slice(0,800) || '—'}</div>
-                <div style="margin-top:8px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#71717A">Safe ${vaultMode?'(Vault)':''}</div>
-                <div style="margin-top:4px;background:#0E1A14;border:1px solid #1F3A2B;border-radius:10px;padding:10px;font-size:12px;font-family:monospace;color:#A7F0BA;white-space:pre-wrap;word-break:break-word">${redacted.slice(0,800) || '—'}</div>
-              </div>
-            </div>
-            <button id="ps-apply" class="ps-btn primary" style="width:100%;margin-top:12px">Apply safe rewrite</button>
-            <div style="margin-top:12px;background:linear-gradient(90deg,#1A1A2E,#0F0F10);border:1px solid #2E2E32;border-radius:12px;padding:12px">
-              <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#BE95FF">Lazy → Great</div>
-              <div style="font-size:12px;color:#A1A1AA;margin-top:4px">Turn scrubbed prompt into great prompt.</div>
-              <button id="ps-boost2" style="margin-top:8px;width:100%;height:36px;border-radius:10px;background:linear-gradient(90deg,#7C3AED,#0F62FE);color:#fff;font-size:13px;font-weight:700;border:none">Turn into great prompt</button>
-            </div>
-          </div>
-        `}
-      </div>
-      <div style="padding:12px;border-top:1px solid #232326;background:#1B1B1E;display:flex;gap:8px">
-        <button id="ps-copy" class="ps-btn" style="flex:1">Copy safe</button>
-        <button id="ps-detok" class="ps-btn" style="flex:1;display:${vaultMode?'inline-flex':'none'};align-items:center;justify-content:center;gap:4px">Detokenize</button>
-      </div>
+            <button id="ps-boost" style="width:100%;height:38px;border-radius:12px;background:#fff;color:#000;font-size:13px;font-weight:700;border:none">Make prompt perfect</button>
+          `:`
+            ${detections.map(d=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#141416;border:1px solid #232326;border-radius:10px"><span style="font-size:12px;font-family:monospace;color:#FF4D4F;background:rgba(255,77,79,.1);padding:2px 6px;border-radius:6px">${d.span.slice(0,22)}</span><span style="color:#52525B">→</span><span style="font-size:11px;font-family:monospace;color:#00C950">${d.placeholder}</span></div>`).join('')}
+            <button id="ps-apply" style="width:100%;height:38px;border-radius:12px;background:#fff;color:#000;font-size:13px;font-weight:700;border:none">Use safe version</button>
+            <button id="ps-boost2" style="width:100%;height:36px;border-radius:12px;background:#141416;border:1px solid #232326;color:#fff;font-size:13px;font-weight:700">Make prompt perfect</button>
+          `}
+        </div>
       </div>
     `;
 
-    // drag
     const hdr=card.querySelector('#ps-drag');
     if(hdr){
-      hdr.onpointerdown=e=>{
-        if(e.target.closest('button')) return;
-        dragging=true; dragStart={x:e.clientX-pos.x,y:e.clientY-pos.y};
-        hdr.setPointerCapture(e.pointerId);
-      };
-      hdr.onpointermove=e=>{ if(!dragging) return; pos={x:Math.max(4,Math.min(e.clientX-dragStart.x, window.innerWidth-394)), y:Math.max(4,Math.min(e.clientY-dragStart.y, window.innerHeight-420))}; card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; };
+      hdr.onpointerdown=e=>{ if(e.target.closest('button')) return; dragging=true; dragStart={x:e.clientX-pos.x,y:e.clientY-pos.y}; hdr.setPointerCapture(e.pointerId); };
+      hdr.onpointermove=e=>{ if(!dragging) return; pos={x:Math.max(4,Math.min(e.clientX-dragStart.x, window.innerWidth-364)), y:Math.max(4,Math.min(e.clientY-dragStart.y, window.innerHeight-420))}; card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; };
       hdr.onpointerup=e=>{ dragging=false; try{hdr.releasePointerCapture(e.pointerId)}catch{} };
     }
-    card.querySelector('#ps-hide')?.addEventListener('click',()=>{ card.style.display='none'; showFloating(); });
     card.querySelector('#ps-min')?.addEventListener('click',()=>{ minimized=!minimized; render(); });
-    card.querySelector('#ps-set')?.addEventListener('click',()=> chrome.runtime.openOptionsPage ? chrome.runtime.openOptionsPage() : window.open(chrome.runtime.getURL('popup.html')) );
-    card.querySelector('#ps-vault')?.addEventListener('click',async()=>{ await setStore({ps_vault_mode: vaultMode?'0':'1'}); render(); });
+    card.querySelector('#ps-hide')?.addEventListener('click',()=>{ card.style.display='none'; showFloating(); });
+    card.querySelector('#ps-set')?.addEventListener('click',()=> window.open(chrome.runtime.getURL('popup.html')));
     card.querySelector('#ps-apply')?.addEventListener('click',()=>{ const ta=findPromptBox(); if(ta) setPromptBox(ta, redacted); });
-    card.querySelector('#ps-copy')?.addEventListener('click',async()=>{ await navigator.clipboard.writeText(redacted); const b=card.querySelector('#ps-copy'); if(b) b.textContent='Copied ✓'; setTimeout(()=>{ if(b) b.textContent='Copy safe'},1200); });
-    card.querySelector('#ps-detok')?.addEventListener('click',async()=>{ const v=await vaultGet(); let t=currentText; for(const e of v) if(t.includes(e.fake)) t=t.split(e.fake).join(e.real); const ta=findPromptBox(); if(ta) setPromptBox(ta,t); });
     card.querySelector('#ps-boost')?.addEventListener('click', doBoost);
     card.querySelector('#ps-boost2')?.addEventListener('click', doBoost);
     card.querySelector('#ps-newchat')?.addEventListener('click', async()=>{ await setStore({ps_session_v2:JSON.stringify({sessionId:await getSid(), leaks:[], createdAt:Date.now()})}); const sid='sess_'+Math.random().toString(36).slice(2,8); await setStore({ps_session_id:sid}); render(); });
@@ -329,7 +246,7 @@
     if(!f){
       f=document.createElement('div'); f.id='ps-float';
       f.style.cssText='position:fixed;bottom:20px;right:20px;z-index:2147483647;';
-      f.innerHTML=`<button id="ps-show" style="height:40px;padding:0 16px;border-radius:999px;background:#171719;border:1px solid #2E2E32;color:#fff;font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.5)">🛡️ PromptShield</button>`;
+      f.innerHTML=`<button id="ps-show" style="height:36px;padding:0 14px;border-radius:999px;background:#0A0A0B;border:1px solid #232326;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#fff;color:#000;display:grid;place-items:center;font-weight:800">U</span> Ultron</button>`;
       document.documentElement.appendChild(f);
       f.querySelector('#ps-show').onclick=()=>{ f.remove(); if(card) card.style.display='block'; };
     }
@@ -339,25 +256,23 @@
     const store=await getStore();
     const gk=store.ps_groq_key||'', gmk=store.ps_gemini_key||'';
     const base = detections.length ? redactText(currentText,detections) : currentText;
-    // simple boost via Groq/Gemini
     let out=base;
     if(gk){
       try{
-        const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+gk},body:JSON.stringify({model:'llama-3.1-8b-instant',temperature:0.4,messages:[{role:'system',content:'You are PromptCowboy. Turn lazy prompt into great prompt. Keep placeholders.'},{role:'user',content:base}]})});
+        const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+gk},body:JSON.stringify({model:'llama-3.1-8b-instant',temperature:0.4,messages:[{role:'system',content:'You are Ultron, elite prompt engineer for ChatGPT/Claude/Gemini. Transform lazy prompt into perfect AI-ready prompt with Role+Goal+Context+Steps+Constraints+Output format. Keep placeholders.'},{role:'user',content:base}]})});
         if(r.ok){ const j=await r.json(); out=j.choices?.[0]?.message?.content?.trim()||out; }
       }catch{}
     } else if(gmk){
       try{
-        const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gmk}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:`Turn lazy prompt into great prompt. Keep placeholders.\n"""${base}"""`}]}]})});
+        const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gmk}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:`You are Ultron. Make this prompt perfect for AI with Role+Goal+Context+Steps+Constraints+Output format. Keep placeholders.\n"""${base}"""`}]}]})});
         if(r.ok){ const j=await r.json(); out=j.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||out; }
       }catch{}
     } else {
-      out='[Boost requires Groq or Gemini key in popup] '+base;
+      out='[Add Groq or Gemini key in Ultron settings] '+base;
     }
     const ta=findPromptBox(); if(ta) setPromptBox(ta,out);
   };
 
-  // find prompt box
   const findPromptBox=()=>{
     const sels=['textarea','[contenteditable="true"]','div[role="textbox"]','div[contenteditable="true"]'];
     for(const sel of sels){
@@ -365,7 +280,6 @@
       for(const el of els){
         const r=el.getBoundingClientRect();
         if(r.width>200 && r.height>40 && r.bottom < window.innerHeight && r.top > 0){
-          // heuristic: near bottom
           if(el.closest('form') || r.bottom > window.innerHeight*0.5) return el;
         }
       }
@@ -388,7 +302,6 @@
     const el=findPromptBox(); if(!el) return;
     currentText=getText(el);
     detections=scanLocal(currentText);
-    // session contam
     if(detections.length){
       const sess=await sessionLoad();
       const already=sess.leaks.some(l=> detections.some(d=> d.span===l.span));
@@ -397,7 +310,6 @@
         await sessionSave(sess);
       }
     }
-    // llm scan if keys
     const store=await getStore();
     const gk=store.ps_groq_key, gmk=store.ps_gemini_key, mh=store.ps_model||'qwen3b';
     if((gk||gmk) && currentText.length>16){
@@ -405,7 +317,6 @@
       let extra=[];
       if(gk) extra=await scanWithGroq(currentText,gk,mh);
       if(!extra.length && gmk) extra=await scanWithGemini(currentText,gmk);
-      // merge
       const map=new Map();
       for(const d of [...detections,...extra]){ const k=d.type+':'+d.span.toLowerCase(); if(!map.has(k)) map.set(k,d); }
       detections=[...map.values()].sort((a,b)=> (a.severity==='HIGH'?0:a.severity==='MEDIUM'?1:2)-(b.severity==='HIGH'?0:b.severity==='MEDIUM'?1:2));
@@ -414,23 +325,20 @@
     await render();
   };
 
-  // observers
   const mo=new MutationObserver(()=> triggerScan());
   mo.observe(document.documentElement,{childList:true,subtree:true,characterData:true});
   document.addEventListener('input', e=>{
     const el=findPromptBox();
     if(el && (e.target===el || el.contains(e.target))) triggerScan();
   }, true);
-  // paste high entropy
   window.addEventListener('paste', e=>{
     const t=e.clipboardData?.getData('text')||'';
     const toks=t.split(/\s+/); const hi=toks.filter(x=> x.length>20 && isHighEntropySecret(x));
     if(hi.length) setTimeout(triggerScan, 200);
   });
-  // file drop
   const taInit=findPromptBox();
   if(taInit){
-    taInit.addEventListener('dragover', e=>{ e.preventDefault(); taInit.style.outline='2px dashed #0F62FE'; });
+    taInit.addEventListener('dragover', e=>{ e.preventDefault(); taInit.style.outline='2px dashed #7C3AED'; });
     taInit.addEventListener('dragleave', ()=> taInit.style.outline='');
     taInit.addEventListener('drop', async e=>{
       e.preventDefault(); taInit.style.outline='';
@@ -441,15 +349,11 @@
       const all=[...d,...nd];
       if(all.length){
         currentText=txt; detections=all; await render();
-        // also set to box as scrubbed
         const scrub=redactText(txt,all);
         setPromptBox(taInit, scrub.slice(0,2000));
       }
     });
   }
-
-  // initial render + scan
   render(); setTimeout(triggerScan, 800);
-  // poll for box
   setInterval(triggerScan, 2000);
 })();

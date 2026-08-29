@@ -241,18 +241,19 @@ Example: prompt "my manager at Infosys said my salary is 12LPA" -> [{"span":"my 
   }
 }
 
-// --- PromptCowboy-style enhancement: turn lazy prompt into great prompt ---
+// --- Ultron: make prompt perfect for AIs ---
 export async function enhancePrompt(safePrompt: string, opts:{ geminiKey?:string, groqKey?: string }): Promise<string>{
   if(!safePrompt.trim()) return safePrompt
-  const system = `You are PromptCowboy + PromptShield. Turn lazy prompts into great prompts while keeping privacy placeholders intact (like [REDACTED_EMAIL], [REDACTED_KEY]).
+  const system = `You are Ultron, an elite prompt engineer for ChatGPT / Claude / Gemini. Transform any lazy prompt into a perfect, AI-ready prompt.
 
 Rules:
-- Keep ALL placeholders exactly as they are — never invent real data.
-- Rewrite to be clear, specific, and effective: add role, goal, constraints, output format.
-- Keep it concise (1-2 sentences if original is short, or structured bullets if complex).
-- Do not add warnings. Return ONLY the enhanced prompt text, no quotes, no preamble.`
+- Keep ALL placeholders exactly (e.g. [REDACTED_EMAIL], user_xxxx@example.com) — never invent real data.
+- Structure: Role + Goal + Context + Steps + Constraints + Output format.
+- Add what the AI should be (role), what to do (goal), key context, clear steps, constraints (tone/length), and how to format the answer.
+- Keep it concise and actionable — no fluff, no preamble, no warnings.
+- Return ONLY the perfect prompt text.`
 
-  const user = `Lazy prompt:\n"""${safePrompt.slice(0,3000)}"""\n\nEnhance it into a great prompt.`
+  const user = `Make this prompt perfect for AI:\n"""${safePrompt.slice(0,3000)}"""`
   // Prefer Groq for speed, fallback to Gemini
   if(opts.groqKey){
     try{
