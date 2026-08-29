@@ -186,11 +186,31 @@
     const redacted = vaultMode ? (await vaultTokenize(currentText,detections)).tokenized : redactText(currentText,detections);
     const sess=await sessionLoad(); const score=sessionScore(sess); const contam=score>15;
 
-    // highlight prompt box
-    const ta=findPromptBox();
-    if(ta){
-      if(hasRisk){ ta.style.outline='2px solid #FF4D4F'; ta.style.outlineOffset='2px'; ta.style.boxShadow='0 0 0 4px rgba(255,77,79,.12)'; }
-      else { ta.style.outline=''; ta.style.boxShadow=''; }
+    // text-only red highlight — mark only sensitive spans, not whole box
+    const taHl=findPromptBox();
+    let hlEl=document.getElementById('ps-inline-highlight');
+    if(!hlEl && taHl && taHl.parentElement){
+      hlEl=document.createElement('div'); hlEl.id='ps-inline-highlight';
+      hlEl.style.cssText='margin:8px 0 0 0;padding:10px 12px;background:#1A0A0A;border:1px solid #4A1A1A;border-radius:10px;font-size:12px;font-family:monospace;line-height:16px;white-space:pre-wrap;word-break:break-word;max-height:140px;overflow:auto;display:none';
+      taHl.parentElement.insertBefore(hlEl, taHl.nextSibling);
+    }
+    if(hlEl){
+      if(hasRisk && currentText){
+        const sorted=[...detections].filter(d=>d.start>=0).sort((a,b)=>a.start-b.start);
+        let out=''; let last=0;
+        for(const d of sorted){
+          out+= currentText.slice(last, d.start).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const seg=currentText.slice(d.start,d.end).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          out+= `<span style="background:rgba(255,77,79,.18);color:#FF4D4F;border-bottom:1.5px solid #FF4D4F;border-radius:2px;padding:0 2px">${seg}</span>`;
+          last=d.end;
+        }
+        out+= currentText.slice(last).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        hlEl.innerHTML=out;
+        hlEl.style.display='block';
+      } else {
+        hlEl.style.display='none';
+      }
+      if(taHl){ taHl.style.outline=''; taHl.style.boxShadow=''; taHl.style.borderColor=''; }
     }
 
     card.innerHTML=`
@@ -274,17 +294,46 @@
   };
 
   const findPromptBox=()=>{
-    const sels=['textarea','[contenteditable="true"]','div[role="textbox"]','div[contenteditable="true"]'];
+    const sels=[
+      'textarea',
+      'textarea[placeholder]',
+      'input[type="text"]',
+      '[contenteditable="true"]',
+      'div[role="textbox"]',
+      'div[contenteditable="true"]',
+      'div[contenteditable]',
+      '[data-testid*="prompt"]',
+      '[data-testid*="input"]',
+      '[aria-label*="prompt" i]',
+      '[aria-label*="message" i]',
+      '[placeholder*="prompt" i]',
+      '[placeholder*="message" i]',
+      '[placeholder*="ask" i]'
+    ];
+    const candidates=[];
     for(const sel of sels){
-      const els=[...document.querySelectorAll(sel)];
-      for(const el of els){
-        const r=el.getBoundingClientRect();
-        if(r.width>200 && r.height>40 && r.bottom < window.innerHeight && r.top > 0){
-          if(el.closest('form') || r.bottom > window.innerHeight*0.5) return el;
+      try{
+        for(const el of document.querySelectorAll(sel)){
+          const r=el.getBoundingClientRect();
+          const style=window.getComputedStyle(el);
+          if(style.display==='none' || style.visibility==='hidden' || r.width<80 || r.height<28) continue;
+          if(r.width<100 && r.height<40) continue;
+          // score: larger + near bottom + has placeholder
+          let score=r.width * r.height;
+          if(r.bottom > window.innerHeight*0.55) score+=50000;
+          if(el.placeholder && /prompt|ask|message|write|type/i.test(el.placeholder)) score+=30000;
+          const aria=el.getAttribute('aria-label')||'';
+          if(/prompt|message|ask/i.test(aria)) score+=20000;
+          if(el.closest('form')) score+=10000;
+          // de-prioritize tiny single-line inputs at top
+          if(r.top < 100) score-=20000;
+          candidates.push({el,score,r});
         }
-      }
+      }catch{}
     }
-    return document.querySelector('textarea') || document.querySelector('[contenteditable="true"]');
+    if(!candidates.length) return document.querySelector('textarea') || document.querySelector('[contenteditable="true"]');
+    candidates.sort((a,b)=> b.score-a.score);
+    return candidates[0].el;
   };
   const getText=(el)=>{
     if(!el) return '';

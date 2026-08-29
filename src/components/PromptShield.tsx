@@ -70,13 +70,34 @@ export default function PromptShield({ value, onApplyRedacted, onValueChange }:{
   useEffect(()=>{ localStorage.setItem('ps_gemini_key',apiKey); localStorage.setItem('ps_groq_key',groqKey); localStorage.setItem('ps_model',modelId)},[apiKey,groqKey,modelId])
   useEffect(()=>{ localStorage.setItem('ps_vault_mode',vaultMode?'1':'0')},[vaultMode])
   useEffect(()=>{ if(!detections.length) return; Session.addLeaks(detections.map(d=>({span:d.span,label:d.label,severity:d.severity as any,type:d.type})),Date.now()); setSessionTick(t=>t+1)},[detections.length])
+  // text-only red highlight — mark only sensitive spans, not whole box
   useEffect(()=>{
-    const ta=document.getElementById('prompt-textarea') as HTMLElement|null
     const cont=document.getElementById('prompt-input-container') as HTMLElement|null
-    if(!ta&&!cont) return
-    if(hasRisk){ if(ta){ ta.style.outline='2px solid #FF4D4F'; (ta.style as any).outlineOffset='2px'; ta.style.boxShadow='0 0 0 4px rgba(255,77,79,.12)'} if(cont){ cont.style.borderColor='#FF4D4F'; cont.style.boxShadow='0 0 0 4px rgba(255,77,79,.10)'} }
-    else { if(ta){ ta.style.outline=''; ta.style.boxShadow=''} if(cont){ cont.style.borderColor=''; cont.style.boxShadow=''} }
-  },[hasRisk])
+    let hl=document.getElementById('ps-sim-highlight') as HTMLDivElement|null
+    if(!hl && cont){
+      hl=document.createElement('div'); hl.id='ps-sim-highlight'
+      hl.style.cssText='margin:8px 0 0 0;padding:10px 12px;background:#1A0A0A;border:1px solid #4A1A1A;border-radius:10px;font-size:12px;font-family:monospace;line-height:16px;white-space:pre-wrap;word-break:break-word;display:none;max-height:120px;overflow:auto'
+      cont.parentElement?.insertBefore(hl, cont.nextSibling)
+    }
+    if(!hl) return
+    const ta=document.getElementById('prompt-textarea') as HTMLElement|null
+    if(ta) ta.style.outline=''
+    if(cont){ cont.style.borderColor=''; cont.style.boxShadow=''}
+    if(hasRisk && value){
+      const sorted=[...detections].filter(d=>d.start>=0).sort((a,b)=>a.start-b.start)
+      let out=''; let last=0
+      for(const d of sorted){
+        out+= value.slice(last, d.start).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        const seg=value.slice(d.start,d.end).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        out+= `<span style="background:rgba(255,77,79,.18);color:#FF4D4F;border-bottom:1.5px solid #FF4D4F;border-radius:2px;padding:0 2px">${seg}</span>`
+        last=d.end
+      }
+      out+= value.slice(last).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      hl.innerHTML=out; hl.style.display='block'
+    } else {
+      hl.style.display='none'
+    }
+  },[hasRisk, value, detections])
   // paste/file
   useEffect(()=>{
     const onPaste=(e:ClipboardEvent)=>{ const t=(e.clipboardData?.getData('text')||'').slice(0,8000); if(!t) return; const hi=t.split(/\s+/).filter(x=> x.length>20 && /^[A-Za-z0-9_\-+=/]+$/.test(x) && shannonEntropy(x)>4.5); if(hi.length) setShowPanel(true)}
